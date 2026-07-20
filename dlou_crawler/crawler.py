@@ -23,9 +23,12 @@ from .models import Article, Attachment
 
 ALLOWED_HOSTS = frozenset({"www.dlou.edu.cn", "news.dlou.edu.cn"})
 SOURCES = (
-    ("学校主页新闻", "https://www.dlou.edu.cn/"),
+    ("学校要闻", "https://news.dlou.edu.cn/1281/list.htm"),
+    ("综合新闻", "https://news.dlou.edu.cn/jcfc/list.htm"),
+    ("校园快讯", "https://news.dlou.edu.cn/1288/list.htm"),
+    ("媒体报道", "https://news.dlou.edu.cn/1283/list.htm"),
+    ("校园喜报", "https://news.dlou.edu.cn/xyxb/list.htm"),
     ("信息公告", "https://www.dlou.edu.cn/89/list.htm"),
-    ("新闻网", "https://news.dlou.edu.cn/"),
 )
 
 
@@ -92,7 +95,11 @@ class DlouCrawler:
                 counter["done"] += 1
                 label = title if len(title) <= 42 else title[:41] + "\u2026"
                 print(f"  [{counter['done']}/{total}] {label}")
-            return url, self._collect_article(url, title, category)
+            try:
+                return url, self._collect_article(url, title, category)
+            except Exception as exc:  # 单篇失败不拖垮整个采集
+                self._warn(f"读取文章失败（已跳过）：{url} —— {exc}")
+                return url, None
 
         with ThreadPoolExecutor(max_workers=self.concurrency) as pool:
             futures = {pool.submit(fetch_one, job): job for job in jobs}
@@ -196,9 +203,13 @@ class DlouCrawler:
     def _category_for(url: str, fallback: str) -> str:
         # Article URLs embed a section code; map the known ones to section names.
         section_map = {
-            "/c89a": "信息公告",
-            "/c1281a": "综合新闻",
+            "/c1281a": "学校要闻",
             "/c4820a": "学校要闻",
+            "/c7118a": "综合新闻",
+            "/c1288a": "校园快讯",
+            "/c1283a": "媒体报道",
+            "/c5057a": "校园喜报",
+            "/c89a": "信息公告",
         }
         for segment, name in section_map.items():
             if segment in url:

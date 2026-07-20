@@ -47,47 +47,75 @@ def _local_timestamp() -> str:
     return now.strftime("%Y-%m-%d %H:%M:%S") + f" ({now.strftime('%z')})"
 
 
+def _group_by_category(articles: list[Article]) -> list[tuple[str, list[Article]]]:
+    """按首次出现顺序把文章归入栏目，返回 [(栏目, [文章...]), ...]。"""
+    order: list[str] = []
+    buckets: dict[str, list[Article]] = {}
+    for article in articles:
+        buckets.setdefault(article.category, []).append(article)
+        if article.category not in order:
+            order.append(article.category)
+    return [(cat, buckets[cat]) for cat in order]
+
+
 def _write_index(output_dir: Path, articles: list[Article]) -> None:
-    """文章清单：一页式目录，方便快速浏览抓到了哪些文章。"""
+    """文章清单：按栏目分组的一页式目录，方便快速浏览。"""
+    groups = _group_by_category(articles)
     lines: list[str] = [
         "大连海洋大学官网公开信息 · 文章清单",
         _RULE,
         f"生成时间：{_local_timestamp()}",
         f"文章总数：{len(articles)}",
-        "",
     ]
+    if groups:
+        lines.append("栏目分布：" + "  ·  ".join(f"{cat} {len(items)} 篇" for cat, items in groups))
+    lines.append("")
     if not articles:
         lines.append("（本次未采集到任何文章）")
-    for index, article in enumerate(articles, start=1):
+    for cat, items in groups:
+        lines.append("")
+        lines.append(f"【{cat}】（{len(items)} 篇）")
         lines.append(_SUBRULE)
-        lines.append(f"[{index}] {article.title}")
-        lines.append(f"    栏目：{article.category}")
-        lines.append(f"    日期：{article.published_at or '未识别'}")
-        lines.append(f"    原文：{article.url}")
+        for index, article in enumerate(items, start=1):
+            lines.append(f"[{index}] {article.title}")
+            lines.append(f"    日期：{article.published_at or '未识别'} ｜ 原文：{article.url}")
     (output_dir / "文章清单.txt").write_text("\n".join(lines) + "\n", encoding=_ENCODING)
 
 
 def _write_full_text(output_dir: Path, articles: list[Article]) -> None:
-    """正文合集：每篇文章含元信息与完整正文，用分隔线彼此区分。"""
+    """正文合集：开头带按栏目分组的目录，正文按栏目归并、彼此用分隔线区分。"""
     if not articles:
         (output_dir / "正文合集.txt").write_text("（本次未采集到任何文章）\n", encoding=_ENCODING)
         return
-    blocks: list[str] = []
-    for index, article in enumerate(articles, start=1):
-        meta = [
-            f"[{index}] {article.title}",
-            f"栏目：{article.category} ｜ 日期：{article.published_at or '未识别'}",
-            f"原文：{article.url}",
-        ]
-        if article.attachments:
-            meta.append("附件：")
-            meta.extend(f"  · {item.name} —— {item.url}" for item in article.attachments)
-        blocks.append(_RULE + "\n" + "\n".join(meta) + "\n\n" + article.content)
+    groups = _group_by_category(articles)
+    toc: list[str] = ["目录（按栏目）", _SUBRULE]
+    seen = 0
+    for cat, items in groups:
+        toc.append(f"{cat}（{len(items)} 篇）")
+        for article in items:
+            seen += 1
+            toc.append(f"  {seen}. {article.title}")
+    blocks: list[str] = ["\n".join(toc), ""]
+    seen = 0
+    for cat, items in groups:
+        blocks.append(_RULE + "\n【" + cat + "】")
+        for article in items:
+            seen += 1
+            meta = [
+                f"[{seen}] {article.title}",
+                f"栏目：{article.category} ｜ 日期：{article.published_at or '未识别'}",
+                f"原文：{article.url}",
+            ]
+            if article.attachments:
+                meta.append("附件：")
+                meta.extend(f"  · {item.name} —— {item.url}" for item in article.attachments)
+            blocks.append("\n".join(meta) + "\n\n" + article.content)
     (output_dir / "正文合集.txt").write_text("\n\n\n".join(blocks) + "\n", encoding=_ENCODING)
 
 
 def _write_report(output_dir: Path, articles: list[Article], warnings: list[str]) -> None:
-    """采集报告：本次概览、产出文件说明与警告记录。"""
+    """采集报告：本次概览、栏目分布、产出文件说明与警告记录。"""
+    groups = _group_by_category(articles)
     lines: list[str] = [
         "大连海洋大学官网公开信息采集报告",
         _RULE,
@@ -97,11 +125,15 @@ def _write_report(output_dir: Path, articles: list[Article], warnings: list[str]
         f"警告 / 未完整采集：{len(warnings)} 条",
         "",
         "本次产出文件：",
-        "  · 文章清单.txt  —— 所有文章的标题、栏目、日期、原文链接一览",
-        "  · 正文合集.txt  —— 每篇文章的完整正文（含元信息）",
+        "  · 文章清单.txt  —— 按栏目分组的文章目录（标题/日期/原文链接）",
+        "  · 正文合集.txt  —— 每篇文章完整正文（开头带目录）",
         "  · 采集报告.txt  —— 本说明与警告记录",
         "  · articles.json —— 机器可读的原始数据（含附件下载地址）",
     ]
+    if groups:
+        lines.append("")
+        lines.append("栏目分布：")
+        lines.extend(f"  - {cat}：{len(items)} 篇" for cat, items in groups)
     if warnings:
         lines.extend(["", "警告与说明："])
         lines.extend(f"  - {warning}" for warning in warnings)
