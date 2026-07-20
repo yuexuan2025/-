@@ -142,6 +142,6 @@ python -m unittest discover -s tests -v
 
 ## 👤 作者
 
-**轩月 (yuexuan2025)** · 大连海洋大学学生，计算机自学中
+**yuexuan2025**
 
 > 欢迎提 Issue / PR，一起把这个小工具做得更好 🐟
