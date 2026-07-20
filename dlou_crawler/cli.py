@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--download-files", action="store_true", help="下载文章中的公开附件")
     parser.add_argument(
         "--user-agent",
-        default="DlouStudentCrawler/1.0 (educational use)",
+        default="DlouStudentCrawler/0.2.0 (educational use)",
         help="请求标识；请勿伪装成浏览器绕过限制",
     )
     return parser
