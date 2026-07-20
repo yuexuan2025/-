@@ -1,0 +1,7 @@
+# 采集结果（每次运行生成，含可能的附件）
+output/
+
+# Python 缓存与测试
+__pycache__/
+*.pyc
+.pytest_cache/

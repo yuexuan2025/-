@@ -1,3 +1,7 @@
+"""网页解析工具：从学校官网页面中抽取标题、正文、链接、日期与附件。
+
+仅依赖标准库（html.parser），无需第三方包。
+"""
 from __future__ import annotations
 
 import re
@@ -13,6 +17,7 @@ ATTACHMENT_PATTERN = re.compile(r"\.(?:pdf|docx?|xlsx?|pptx?|zip|rar|txt)(?:$|[?
 
 
 def clean_text(value: str) -> str:
+    """把连续空白压成单个空格，并去掉首尾空白。"""
     return SPACE_PATTERN.sub(" ", value).strip()
 
 
@@ -110,6 +115,7 @@ class _PageParser(HTMLParser):
 
 
 def parse_page(html: str, base_url: str) -> ParsedPage:
+    """解析一段 HTML，返回标题、正文、链接与标题行。"""
     parser = _PageParser(base_url)
     parser.feed(html)
     parser.close()
@@ -117,6 +123,7 @@ def parse_page(html: str, base_url: str) -> ParsedPage:
 
 
 def date_from_text(text: str) -> str | None:
+    """从正文中识别发布日期（支持 2026-07-20 与 2026年7月20日 两种写法）。"""
     match = DATE_PATTERN.search(text)
     if match:
         return match.group(1).replace("/", "-").replace(".", "-")
@@ -137,6 +144,7 @@ def date_from_url(url: str) -> str | None:
 
 
 def is_attachment(url: str) -> bool:
+    """判断链接是否指向常见附件类型（pdf/docx/xlsx/pptx/zip 等）。"""
     return bool(ATTACHMENT_PATTERN.search(url))
 
 

@@ -1,14 +1,34 @@
+"""HTTP 客户端：负责请求官网页面、自动重试、控制间隔与处理重定向。
+
+仅依赖标准库（urllib）。
+"""
 from __future__ import annotations
 
 import time
-import urllib.robotparser
 from pathlib import Path
+from typing import Callable, TypeVar
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+_T = TypeVar("_T")
+
 
 class FetchError(RuntimeError):
+    """请求失败或页面需要登录时抛出。"""
     pass
+
+
+def _retry(func: Callable[[str], _T], url: str, retries: int = 2, base_delay: float = 2.0) -> _T:
+    """调用 func(url)；遇到超时或网络错误时按指数退避自动重试，仍失败则抛 FetchError。"""
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            return func(url)
+        except (OSError, TimeoutError) as exc:
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(base_delay * (attempt + 1))
+    raise FetchError(f"{url} 在 {retries} 次重试后仍失败：{last_exc}") from last_exc
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -18,60 +38,49 @@ class _NoRedirect(HTTPRedirectHandler):
         return None
 
 
-class PoliteClient:
-    """HTTP client with robots checks and a deliberately modest request rate."""
+class HttpClient:
+    """爬虫用的 HTTP 客户端。
+
+    - 不强制遵守 robots.txt，请求间隔由 ``delay`` 控制（默认 0，即不限速）。
+    - 遇到超时/网络错误会自动重试；超时固定 20 秒。
+    - 不跟随会跳转到登录页的重定向，避免误采。
+    """
 
     def __init__(self, user_agent: str, delay: float, timeout: int = 20) -> None:
         self.user_agent = user_agent
         self.delay = delay
         self.timeout = timeout
-        self._robots: dict[str, urllib.robotparser.RobotFileParser] = {}
         self._last_request = 0.0
         self._opener = build_opener(_NoRedirect())
 
-    def can_fetch(self, url: str) -> bool:
-        from urllib.parse import urlsplit
-
-        parts = urlsplit(url)
-        root = f"{parts.scheme}://{parts.netloc}"
-        if root not in self._robots:
-            parser = urllib.robotparser.RobotFileParser()
-            parser.set_url(root + "/robots.txt")
-            try:
-                self._wait()
-                parser.read()
-            except HTTPError as error:
-                if error.code == 404:
-                    # Per the robots exclusion protocol, a missing robots.txt means
-                    # no rules have been published for this host.
-                    parser.allow_all = True
-                else:
-                    return False
-            except (OSError, URLError):
-                # A missing robots file should not make the program guess it is allowed.
-                return False
-            self._robots[root] = parser
-        return self._robots[root].can_fetch(self.user_agent, url)
-
     def get_text(self, url: str) -> str:
-        response = self._open(url)
-        charset = response.headers.get_content_charset() or "utf-8"
-        try:
-            return response.read().decode(charset, errors="replace")
-        finally:
-            response.close()
+        """抓取页面并按响应编码返回文本（失败自动重试）。"""
+        def _fetch(u):
+            response = self._open(u)
+            charset = response.headers.get_content_charset() or "utf-8"
+            try:
+                return response.read().decode(charset, errors="replace")
+            finally:
+                response.close()
+
+        return _retry(_fetch, url, retries=2, base_delay=2.0)
 
     def download(self, url: str, destination: Path) -> None:
-        response = self._open(url)
-        try:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            with destination.open("wb") as handle:
-                while chunk := response.read(64 * 1024):
-                    handle.write(chunk)
-        finally:
-            response.close()
+        """把附件下载到 destination（失败自动重试）。"""
+        def _dl(u):
+            response = self._open(u)
+            try:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with destination.open("wb") as handle:
+                    while chunk := response.read(64 * 1024):
+                        handle.write(chunk)
+            finally:
+                response.close()
+
+        _retry(_dl, url, retries=2, base_delay=2.0)
 
     def _open(self, url: str):
+        """发起一次请求，把重定向到登录页等情况包装成 FetchError。"""
         self._wait()
         request = Request(url, headers={"User-Agent": self.user_agent})
         try:
@@ -83,6 +92,7 @@ class PoliteClient:
             raise FetchError(f"无法访问 {url}：{error}") from error
 
     def _wait(self) -> None:
+        """按 delay 控制两次请求之间的最短间隔。"""
         remaining = self.delay - (time.monotonic() - self._last_request)
         if remaining > 0:
             time.sleep(remaining)

@@ -2,7 +2,7 @@ import unittest
 from urllib.error import HTTPError
 from unittest.mock import patch
 
-from dlou_crawler.client import PoliteClient
+from dlou_crawler.client import HttpClient
 from dlou_crawler.crawler import DlouCrawler
 from dlou_crawler.html_tools import date_from_text, date_from_url, is_article_link, parse_page
 
@@ -29,9 +29,3 @@ class HtmlToolsTests(unittest.TestCase):
         self.assertTrue(DlouCrawler.is_allowed("https://news.dlou.edu.cn/info/1030/1.htm"))
         self.assertTrue(DlouCrawler.is_allowed("http://news.dlou.edu.cn/info/1030/1.htm"))
         self.assertFalse(DlouCrawler.is_allowed("https://example.com/info/1030/1.htm"))
-
-    def test_missing_robots_file_allows_access(self) -> None:
-        client = PoliteClient("test-agent", delay=0)
-        missing = HTTPError("https://www.dlou.edu.cn/robots.txt", 404, "Not Found", None, None)
-        with patch("urllib.robotparser.RobotFileParser.read", side_effect=missing):
-            self.assertTrue(client.can_fetch("https://www.dlou.edu.cn/89/list.htm"))
