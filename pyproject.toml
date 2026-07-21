@@ -3,9 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dlou-student-crawler"
-version = "0.2.0"
-description = "大连海洋大学官网公开信息采集器（纯标准库，仅采集公开内容）"
+name = "dlou-crawler"
+version = "2.0.0"
+description = "大连海洋大学官网公开信息采集器"
+dependencies = [
+    "tkhtmlview>=0.3",
+    "Pillow>=11",
+]
 requires-python = ">=3.10"
 
 [project.scripts]

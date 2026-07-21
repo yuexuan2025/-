@@ -1,14 +1,11 @@
-"""网页解析工具：从学校官网页面中抽取标题、正文、链接、日期与附件。
+"""网页解析工具：抽取标题、正文、链接、日期与附件。"""
 
-仅依赖标准库（html.parser），无需第三方包。
-"""
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from urllib.parse import urljoin
-
 
 DATE_PATTERN = re.compile(r"(?<!\d)(20\d{2}[./-]\d{1,2}[./-]\d{1,2})(?!\d)")
 CHINESE_DATE_PATTERN = re.compile(r"(?<!\d)(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日")
@@ -17,7 +14,6 @@ ATTACHMENT_PATTERN = re.compile(r"\.(?:pdf|docx?|xlsx?|pptx?|zip|rar|txt)(?:$|[?
 
 
 def clean_text(value: str) -> str:
-    """把连续空白压成单个空格，并去掉首尾空白。"""
     return SPACE_PATTERN.sub(" ", value).strip()
 
 
@@ -36,8 +32,6 @@ class ParsedPage:
 
 
 class _PageParser(HTMLParser):
-    """Small dependency-free parser for the WebPlus-style pages used by the site."""
-
     CONTENT_WORDS = ("vsb_content", "article-content", "article_content", "content")
 
     def __init__(self, base_url: str) -> None:
@@ -115,7 +109,6 @@ class _PageParser(HTMLParser):
 
 
 def parse_page(html: str, base_url: str) -> ParsedPage:
-    """解析一段 HTML，返回标题、正文、链接与标题行。"""
     parser = _PageParser(base_url)
     parser.feed(html)
     parser.close()
@@ -123,7 +116,6 @@ def parse_page(html: str, base_url: str) -> ParsedPage:
 
 
 def date_from_text(text: str) -> str | None:
-    """从正文中识别发布日期（支持 2026-07-20 与 2026年7月20日 两种写法）。"""
     match = DATE_PATTERN.search(text)
     if match:
         return match.group(1).replace("/", "-").replace(".", "-")
@@ -135,7 +127,6 @@ def date_from_text(text: str) -> str | None:
 
 
 def date_from_url(url: str) -> str | None:
-    """Article URLs normally contain their publication date, for example /2026/0717/."""
     match = re.search(r"/(20\d{2})/(\d{2})(\d{2})/", url)
     if not match:
         return None
@@ -144,12 +135,10 @@ def date_from_url(url: str) -> str | None:
 
 
 def is_attachment(url: str) -> bool:
-    """判断链接是否指向常见附件类型（pdf/docx/xlsx/pptx/zip 等）。"""
     return bool(ATTACHMENT_PATTERN.search(url))
 
 
 def is_article_link(link: Link) -> bool:
-    """Keep article-looking pages and reject menus, images and pagination links."""
     lowered = link.url.lower()
     if len(link.text) < 6 or is_attachment(lowered):
         return False

@@ -1,7 +1,15 @@
-# 采集结果（每次运行生成，含可能的附件）
+# 采集结果（每次运行生成）
 output/
 
-# Python 缓存与测试
+# Python 缓存
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# PyInstaller 构建产物
+build/
+dist/
+*.exe
+
+# 打包入口（保留源码版）
+# run.py 已在仓库中
