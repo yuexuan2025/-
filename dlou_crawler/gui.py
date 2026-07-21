@@ -1,15 +1,12 @@
-"""DLOUWebsiteCrawler 图形界面：简洁布局，结果优先，内置HTML报告。
+"""DLOUWebsiteCrawler 图形界面。
 
 布局：
   ┌─────────────────────────────────────────────┐
   │  顶部标题栏（简洁白底）                        │
   ├──────────────┬──────────────────────────────┤
-  │  采集控制     │     运行日志                  │  （上半部分，约 1/4）
-  │              │                              │
+  │  采集控制     │     运行日志                  │
   ├──────────────┴──────────────────────────────┤
-  │                                              │
-  │         采集结果（文章浏览 / HTML报告 双视图）   │  （下半部分，约 3/4）
-  │                                              │
+  │         采集结果（三栏式 + HTML报告按钮）       │
   └─────────────────────────────────────────────┘
 """
 
@@ -23,8 +20,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import (
     Tk, Frame, Label, Entry, Button, Checkbutton, IntVar, StringVar,
-    Text, Scrollbar, messagebox, filedialog, Canvas,
-    Listbox,
+    Text, Scrollbar, messagebox, filedialog, Canvas, Listbox,
 )
 from tkinter import ttk
 
@@ -34,19 +30,12 @@ from .crawler import DlouCrawler, CATEGORY_GROUPS
 from .output import write_outputs
 from .models import Article
 
-try:
-    from tkhtmlview import HTMLScrolledText
-    _HAS_TKHTMLVIEW = True
-except ImportError:
-    _HAS_TKHTMLVIEW = False
-
 
 _CONFIG_FILE = Path.home() / ".dlou_crawler_config.json"
-_APP_NAME = "DLOUWebsiteCrawler"
 
 
 class ModernButton(Button):
-    """现代化按钮。"""
+    """统一风格按钮。"""
     def __init__(self, master, text, command=None, style="primary", **kwargs):
         styles = {
             "primary": {"bg": "#2563eb", "fg": "white", "activebackground": "#1d4ed8",
@@ -72,7 +61,7 @@ class ModernButton(Button):
 
 
 class CrawlerGUI:
-    """简洁布局：控制+日志在上，结果在下（双视图）。"""
+    """采集控制 + 日志在上，采集结果在下。"""
 
     def __init__(self, root: Tk) -> None:
         self.root = root
@@ -87,9 +76,10 @@ class CrawlerGUI:
         self._warnings: list[str] = []
         self._output_dir = Path("output")
         self._filtered: list[Article] = []
-        self._current_group: str | None = None
+        self._current_group: str = ""
+        self._selected_category: str | None = None
 
-        # 最优默认参数（用户不用管）
+        # 最优默认参数
         self._default_pages = 2
         self._default_max_articles = 200
         self._default_concurrency = 20
@@ -97,17 +87,15 @@ class CrawlerGUI:
 
         self._setup_ui()
         self._load_config()
-
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     def _setup_ui(self) -> None:
-        """整体布局。"""
         self._build_header()
 
         body = Frame(self.root, bg="#f1f5f9")
         body.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        # 上半部分：控制（左） + 日志（右）
+        # 上半：控制（左） + 日志（右）
         top = Frame(body, bg="#f1f5f9", height=220)
         top.pack(fill="x", pady=(0, 10))
         top.pack_propagate(False)
@@ -123,13 +111,13 @@ class CrawlerGUI:
         right_panel.pack(side="left", fill="both", expand=True, padx=(10, 0))
         self._build_log(right_panel)
 
-        # 下半部分：采集结果（最重要）
+        # 下半：采集结果
         bottom = Frame(body, bg="white", highlightthickness=1,
                        highlightbackground="#e2e8f0")
         bottom.pack(fill="both", expand=True)
         self._build_results(bottom)
 
-    # ===== 顶部标题栏 =====
+    # ===== 标题栏 =====
     def _build_header(self) -> None:
         header = Frame(self.root, bg="white", height=52,
                        highlightthickness=1, highlightbackground="#e2e8f0")
@@ -155,7 +143,7 @@ class CrawlerGUI:
         self.status_pill.pack(side="right")
         self._draw_pill(self.status_pill, "待采集", "#64748b")
 
-    # ===== 采集控制（左侧，简洁版） =====
+    # ===== 采集控制 =====
     def _build_control(self, parent: Frame) -> None:
         title = Frame(parent, bg="white")
         title.pack(fill="x", padx=14, pady=(10, 2))
@@ -166,10 +154,8 @@ class CrawlerGUI:
         body.pack(fill="both", expand=True, padx=14, pady=(0, 12))
 
         # 保存路径
-        out_frame = Frame(body, bg="white")
-        out_frame.pack(fill="x", pady=(6, 0))
-        Label(out_frame, text="保存路径", font=("Microsoft YaHei UI", 9),
-              bg="white", fg="#64748b").pack(anchor="w")
+        Label(body, text="保存路径", font=("Microsoft YaHei UI", 9),
+              bg="white", fg="#64748b").pack(anchor="w", pady=(6, 0))
         out_row = Frame(body, bg="white")
         out_row.pack(fill="x", pady=(3, 0))
         self.output_var = StringVar(value="output")
@@ -180,7 +166,7 @@ class CrawlerGUI:
         ModernButton(out_row, "…", command=self._select_output_dir,
                      style="secondary", padx=8, pady=4).pack(side="left", padx=(6, 0))
 
-        # 下载附件选项
+        # 附件选项
         self.download_files_var = IntVar(value=0)
         Checkbutton(body, text="下载文章附件", variable=self.download_files_var,
                     font=("Microsoft YaHei UI", 10), bg="white", fg="#475569",
@@ -189,10 +175,8 @@ class CrawlerGUI:
         # 主按钮
         btn_frame = Frame(body, bg="white")
         btn_frame.pack(fill="x", pady=(12, 0))
-
         self.start_btn = ModernButton(btn_frame, "开始采集", command=self._start_crawl, style="primary")
         self.start_btn.pack(fill="x", pady=(0, 6))
-
         self.stop_btn = ModernButton(btn_frame, "停止采集", command=self._stop_crawl, style="danger")
         self.stop_btn.pack(fill="x")
         self.stop_btn.config(state="disabled")
@@ -205,7 +189,7 @@ class CrawlerGUI:
         ModernButton(op_row, "打开文件夹", command=self._open_output_dir,
                      style="secondary", padx=10, pady=5).pack(side="left", padx=(6, 0))
 
-    # ===== 运行日志（右侧） =====
+    # ===== 运行日志 =====
     def _build_log(self, parent: Frame) -> None:
         title = Frame(parent, bg="white")
         title.pack(fill="x", padx=14, pady=(10, 2))
@@ -219,7 +203,6 @@ class CrawlerGUI:
 
         sb = Scrollbar(body)
         sb.pack(side="right", fill="y")
-
         self.log_text = Text(body, font=("Cascadia Mono", 9),
                              bg="#0b1220", fg="#e2e8f0", wrap="word",
                              yscrollcommand=sb.set, insertbackground="white",
@@ -232,7 +215,7 @@ class CrawlerGUI:
         self.log_text.tag_configure("error", foreground="#f87171")
         self.log_text.tag_configure("info", foreground="#93c5fd")
 
-    # ===== 采集结果（双视图：文章浏览 + HTML报告） =====
+    # ===== 采集结果 =====
     def _build_results(self, parent: Frame) -> None:
         # 标题栏
         header = Frame(parent, bg="white", height=42,
@@ -250,29 +233,16 @@ class CrawlerGUI:
                                    bg="white", fg="#94a3b8")
         self.results_count.pack(side="left", padx=(8, 0))
 
-        # 视图切换按钮
-        self.view_tabs = Frame(header_inner, bg="white")
-        self.view_tabs.pack(side="right")
-
-        self.btn_view_articles = Button(self.view_tabs, text="📄 文章浏览",
-                                        font=("Microsoft YaHei UI", 9, "bold"),
-                                        bg="#2563eb", fg="white",
-                                        activebackground="#1d4ed8",
-                                        activeforeground="white",
-                                        relief="flat", bd=0, cursor="hand2",
-                                        padx=12, pady=5,
-                                        command=self._switch_view_articles)
-        self.btn_view_articles.pack(side="left", padx=(0, 2))
-
-        self.btn_view_html = Button(self.view_tabs, text="🌐 HTML 报告",
-                                    font=("Microsoft YaHei UI", 9),
-                                    bg="#f1f5f9", fg="#475569",
-                                    activebackground="#e2e8f0",
-                                    activeforeground="#334155",
+        # 醒目蓝色大按钮：在浏览器中打开 HTML 报告
+        self.btn_open_html = Button(header_inner, text="🌐 在浏览器中打开 HTML 报告",
+                                    font=("Microsoft YaHei UI", 10, "bold"),
+                                    bg="#2563eb", fg="white",
+                                    activebackground="#1d4ed8",
+                                    activeforeground="white",
                                     relief="flat", bd=0, cursor="hand2",
-                                    padx=12, pady=5,
-                                    command=self._switch_view_html)
-        self.btn_view_html.pack(side="left")
+                                    padx=20, pady=6,
+                                    command=self._open_html_report)
+        self.btn_open_html.pack(side="right")
 
         # 空状态
         self.empty_state = Frame(parent, bg="white")
@@ -290,19 +260,12 @@ class CrawlerGUI:
               font=("Microsoft YaHei UI", 10),
               bg="white", fg="#94a3b8").pack()
 
-        # 结果内容容器（初始隐藏）
+        # 结果内容（初始隐藏）
         self.results_body = Frame(parent, bg="white")
-
-        # === 文章浏览视图 ===
-        self.view_articles = Frame(self.results_body, bg="white")
-        self._build_articles_view(self.view_articles)
-
-        # === HTML 报告视图 ===
-        self.view_html = Frame(self.results_body, bg="white")
-        self._build_html_view(self.view_html)
+        self._build_articles_view(self.results_body)
 
     def _build_articles_view(self, parent: Frame) -> None:
-        """文章浏览：三栏（栏目 / 文章列表 / 正文预览）。"""
+        """三栏：栏目 / 文章列表 / 正文预览。"""
         # 顶部：分类 Tab + 搜索
         top_bar = Frame(parent, bg="white")
         top_bar.pack(fill="x", padx=14, pady=(8, 6))
@@ -326,7 +289,7 @@ class CrawlerGUI:
         main = Frame(parent, bg="white")
         main.pack(fill="both", expand=True, padx=14, pady=(0, 12))
 
-        # 左：子分类
+        # 左：栏目
         cat_frame = Frame(main, bg="#f8fafc", width=150,
                           highlightthickness=1, highlightbackground="#e2e8f0")
         cat_frame.pack(side="left", fill="y")
@@ -344,7 +307,8 @@ class CrawlerGUI:
                                    relief="flat", bd=0,
                                    yscrollcommand=cat_sb.set,
                                    activestyle="none",
-                                   highlightthickness=0)
+                                   highlightthickness=0,
+                                   exportselection=False)
         self.cat_listbox.pack(fill="both", expand=True, side="left", padx=2, pady=2)
         cat_sb.config(command=self.cat_listbox.yview)
         self.cat_listbox.bind("<<ListboxSelect>>", lambda e: self._on_select_category())
@@ -367,7 +331,8 @@ class CrawlerGUI:
                                        relief="flat", bd=0,
                                        yscrollcommand=list_sb.set,
                                        activestyle="none",
-                                       highlightthickness=0)
+                                       highlightthickness=0,
+                                       exportselection=False)
         self.article_listbox.pack(fill="both", expand=True, side="left", padx=2, pady=2)
         list_sb.config(command=self.article_listbox.yview)
         self.article_listbox.bind("<<ListboxSelect>>", lambda e: self._on_select_article())
@@ -394,7 +359,6 @@ class CrawlerGUI:
 
         rsb = Scrollbar(reader_body)
         rsb.pack(side="right", fill="y")
-
         self.reader_text = Text(reader_body, font=("Microsoft YaHei UI", 11),
                                 bg="#ffffff", fg="#1e293b", wrap="word",
                                 yscrollcommand=rsb.set, relief="flat", bd=0,
@@ -418,77 +382,20 @@ class CrawlerGUI:
         ModernButton(reader_footer, "打开原文链接", command=self._open_current_url,
                      style="ghost", padx=10, pady=5).pack(side="left")
 
-    def _build_html_view(self, parent: Frame) -> None:
-        """HTML 报告视图。"""
-        if _HAS_TKHTMLVIEW:
-            self.html_viewer = HTMLScrolledText(parent, background="white",
-                                                 font=("Microsoft YaHei UI", 10))
-            self.html_viewer.pack(fill="both", expand=True, padx=0, pady=0)
-        else:
-            # fallback: 普通文本显示提示
-            self.html_viewer = Text(parent, font=("Microsoft YaHei UI", 10),
-                                    bg="white", fg="#475569", wrap="word",
-                                    relief="flat", padx=20, pady=20)
-            self.html_viewer.pack(fill="both", expand=True)
-            self.html_viewer.insert("end",
-                "HTML 查看组件未就绪\n\n"
-                "请点击右上角「浏览器查看 HTML 报告」在浏览器中打开。")
-            self.html_viewer.config(state="disabled")
-
-    def _switch_view_articles(self) -> None:
-        self.btn_view_articles.config(bg="#2563eb", fg="white",
-                                      font=("Microsoft YaHei UI", 9, "bold"))
-        self.btn_view_html.config(bg="#f1f5f9", fg="#475569",
-                                  font=("Microsoft YaHei UI", 9))
-        self.view_html.pack_forget()
-        self.view_articles.pack(fill="both", expand=True)
-
-    def _switch_view_html(self) -> None:
-        self.btn_view_html.config(bg="#2563eb", fg="white",
-                                  font=("Microsoft YaHei UI", 9, "bold"))
-        self.btn_view_articles.config(bg="#f1f5f9", fg="#475569",
-                                      font=("Microsoft YaHei UI", 9))
-        self.view_articles.pack_forget()
-        self.view_html.pack(fill="both", expand=True)
-
-        # 加载HTML报告
-        self._load_html_report()
-
-    def _load_html_report(self) -> None:
-        html_path = Path(self.output_var.get()) / "采集报告.html"
-        if not html_path.exists():
-            if _HAS_TKHTMLVIEW:
-                self.html_viewer.set_html("<h3>暂无HTML报告</h3><p>请先执行采集。</p>")
-            return
-
-        try:
-            html_content = html_path.read_text(encoding="utf-8", errors="ignore")
-            if _HAS_TKHTMLVIEW:
-                self.html_viewer.set_html(html_content)
-        except Exception as e:
-            if _HAS_TKHTMLVIEW:
-                self.html_viewer.set_html(f"<h3>加载失败</h3><p>{str(e)}</p>")
-
     # ===== 分类 / 过滤 / 文章展示 =====
     def _build_group_tabs(self) -> None:
         for w in self.group_tabs.winfo_children():
             w.destroy()
 
-        btn = Button(self.group_tabs, text="全部",
-                     font=("Microsoft YaHei UI", 10, "bold"),
-                     bg="#2563eb", fg="white",
-                     activebackground="#1d4ed8", activeforeground="white",
-                     relief="flat", bd=0, cursor="hand2",
-                     padx=12, pady=5,
-                     command=lambda: self._switch_group(None))
-        btn.pack(side="left", padx=(0, 4))
-
-        self._group_buttons: dict[str | None, Button] = {None: btn}
+        self._group_buttons: dict[str, Button] = {}
+        first_group = None
 
         for group_name, _cats in CATEGORY_GROUPS:
             count = self._count_in_group(group_name)
             if count == 0:
                 continue
+            if first_group is None:
+                first_group = group_name
             b = Button(self.group_tabs, text=f"{group_name} {count}",
                        font=("Microsoft YaHei UI", 10),
                        bg="#f1f5f9", fg="#475569",
@@ -499,13 +406,16 @@ class CrawlerGUI:
             b.pack(side="left", padx=(0, 4))
             self._group_buttons[group_name] = b
 
+        if first_group and not self._current_group:
+            self._switch_group(first_group)
+
     def _count_in_group(self, group_name: str) -> int:
         for name, cats in CATEGORY_GROUPS:
             if name == group_name:
                 return sum(1 for a in self._articles if a.category in cats)
         return 0
 
-    def _switch_group(self, group_name: str | None) -> None:
+    def _switch_group(self, group_name: str) -> None:
         self._current_group = group_name
         for g, btn in self._group_buttons.items():
             if g == group_name:
@@ -514,6 +424,7 @@ class CrawlerGUI:
             else:
                 btn.config(bg="#f1f5f9", fg="#475569",
                            font=("Microsoft YaHei UI", 10))
+        self._selected_category = None
         self._refresh_category_list()
         self._apply_filter()
 
@@ -522,7 +433,7 @@ class CrawlerGUI:
         self.cat_listbox.insert(0, "  全部栏目")
         self.cat_listbox.selection_set(0)
 
-        if self._current_group is None:
+        if not self._current_group:
             seen = set()
             for a in self._articles:
                 if a.category not in seen:
@@ -538,28 +449,29 @@ class CrawlerGUI:
                     break
 
     def _on_select_category(self) -> None:
+        sel = self.cat_listbox.curselection()
+        if not sel:
+            return
+        if sel[0] == 0:
+            self._selected_category = None
+        else:
+            self._selected_category = self.cat_listbox.get(sel[0]).strip()
         self._apply_filter()
 
     def _apply_filter(self) -> None:
-        keyword = self.search_var.get().lower() if hasattr(self, 'search_var') else ""
+        keyword = self.search_var.get().lower()
 
-        cat_sel = self.cat_listbox.curselection() if hasattr(self, 'cat_listbox') else []
-        selected_cat = None
-        if cat_sel and cat_sel[0] > 0:
-            selected_cat = self.cat_listbox.get(cat_sel[0]).strip()
-
-        group_cats: set[str] | None = None
-        if self._current_group is not None:
-            for name, cats in CATEGORY_GROUPS:
-                if name == self._current_group:
-                    group_cats = set(cats)
-                    break
+        group_cats: set[str] = set()
+        for name, cats in CATEGORY_GROUPS:
+            if name == self._current_group:
+                group_cats = set(cats)
+                break
 
         self._filtered = []
         for a in self._articles:
-            if group_cats is not None and a.category not in group_cats:
+            if group_cats and a.category not in group_cats:
                 continue
-            if selected_cat and selected_cat != "全部栏目" and a.category != selected_cat:
+            if self._selected_category and a.category != self._selected_category:
                 continue
             if keyword and keyword not in a.title.lower():
                 continue
@@ -571,9 +483,9 @@ class CrawlerGUI:
             short_title = a.title if len(a.title) <= 40 else a.title[:39] + "…"
             self.article_listbox.insert("end", f"  {date}  {short_title}")
 
-        total = len(self._articles)
         shown = len(self._filtered)
-        self.results_count.config(text=f"（共 {total} 篇 · 显示 {shown} 篇）")
+        total_in_group = sum(1 for a in self._articles if a.category in group_cats) if group_cats else len(self._articles)
+        self.results_count.config(text=f"（共 {total_in_group} 篇 · 显示 {shown} 篇）")
 
     def _on_select_article(self) -> None:
         sel = self.article_listbox.curselection()
@@ -581,8 +493,7 @@ class CrawlerGUI:
             return
         idx = sel[0]
         if idx < len(self._filtered):
-            article = self._filtered[idx]
-            self._display_article(article)
+            self._display_article(self._filtered[idx])
 
     def _display_article(self, article: Article) -> None:
         self.reader_title.config(text=article.title)
@@ -592,8 +503,8 @@ class CrawlerGUI:
         self.reader_text.delete("1.0", "end")
 
         self.reader_text.insert("end", article.title + "\n", "h1")
-        meta_line = f"\n📅 {article.published_at or '未知'}    📂 {article.category}\n\n"
-        self.reader_text.insert("end", meta_line, "meta")
+        self.reader_text.insert("end",
+            f"\n📅 {article.published_at or '未知'}    📂 {article.category}\n\n", "meta")
         self.reader_text.insert("end", "─" * 50 + "\n\n", "meta")
 
         if article.attachments:
@@ -628,7 +539,6 @@ class CrawlerGUI:
         self._start_time = time.monotonic()
         self._articles = []
         self._warnings = []
-        self._output_dir = Path(self.output_var.get())
 
         self.start_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
@@ -646,7 +556,7 @@ class CrawlerGUI:
     def _run_crawler(self) -> None:
         try:
             output_dir = Path(self.output_var.get())
-            client = HttpClient("DLOUWebsiteCrawler/2.0", self._default_delay)
+            client = HttpClient("DLOUWebsiteCrawler/4.0", self._default_delay)
             crawler = DlouCrawler(
                 client=client,
                 pages_per_source=self._default_pages,
@@ -691,15 +601,8 @@ class CrawlerGUI:
         if not self.results_body.winfo_ismapped():
             self.empty_state.pack_forget()
             self.results_body.pack(fill="both", expand=True)
-            self.view_articles.pack(fill="both", expand=True)
-            self._build_group_tabs()
-            self._switch_group(None)
-        else:
-            self._build_group_tabs()
-            self._switch_group(None)
-            # 如果当前在HTML视图，刷新一下
-            if self.btn_view_html.cget("bg") == "#2563eb":
-                self._load_html_report()
+        self._build_group_tabs()
+        self._switch_group(None)
 
     # ===== 辅助 =====
     def _save_results(self) -> None:
@@ -803,7 +706,6 @@ def main() -> None:
         style.theme_use("vista")
     except Exception:
         pass
-
     CrawlerGUI(root)
     root.mainloop()
 

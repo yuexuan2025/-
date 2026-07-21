@@ -64,22 +64,22 @@ SOURCES = (
     ("研究生招生", "https://master.dlou.edu.cn/9043/list.htm"),
     ("本科生就业", "https://jiuye.dlou.edu.cn/xbjy/list.htm"),
     ("研究生就业", "https://master.dlou.edu.cn/9068/list.htm"),
-    ("继续教育", "http://jxjyxy.dlou.edu.cn/"),
+    ("继续教育", "https://jxjyxy.dlou.edu.cn/"),
     # 各学院
-    ("水产与生命学院", "http://life.dlou.edu.cn/"),
+    ("水产与生命学院", "https://life.dlou.edu.cn/"),
     ("海洋科技与环境学院", "https://hhxy.dlou.edu.cn/"),
-    ("食品科学与工程学院", "http://food.dlou.edu.cn/"),
-    ("海洋与土木工程学院", "http://tmgc.dlou.edu.cn/"),
-    ("机械与动力工程学院", "http://jixie.dlou.edu.cn/"),
-    ("航海与船舶工程学院", "http://sea.dlou.edu.cn/"),
-    ("信息工程学院", "http://xxgc.dlou.edu.cn/"),
-    ("经济管理学院", "http://jjgl.dlou.edu.cn/"),
-    ("海洋法律与人文学院", "http://fxy.dlou.edu.cn/"),
-    ("外国语学院", "http://wgy.dlou.edu.cn/"),
-    ("中新合作学院", "http://zwhzbx.dlou.edu.cn/"),
-    ("马克思主义学院", "http://mks.dlou.edu.cn/"),
+    ("食品科学与工程学院", "https://food.dlou.edu.cn/"),
+    ("海洋与土木工程学院", "https://tmgc.dlou.edu.cn/"),
+    ("机械与动力工程学院", "https://jixie.dlou.edu.cn/"),
+    ("航海与船舶工程学院", "https://sea.dlou.edu.cn/"),
+    ("信息工程学院", "https://xxgc.dlou.edu.cn/"),
+    ("经济管理学院", "https://jjgl.dlou.edu.cn/"),
+    ("海洋法律与人文学院", "https://fxy.dlou.edu.cn/"),
+    ("外国语学院", "https://wgy.dlou.edu.cn/"),
+    ("中新合作学院", "https://zwhzbx.dlou.edu.cn/"),
+    ("马克思主义学院", "https://mks.dlou.edu.cn/"),
     ("体育与教育学院", "https://tyxy.dlou.edu.cn/"),
-    ("应用技术学院", "http://gzy.dlou.edu.cn/"),
+    ("应用技术学院", "https://gzy.dlou.edu.cn/"),
 )
 
 
@@ -182,7 +182,8 @@ class DlouCrawler:
             except Exception as exc:
                 with counter_lock:
                     counter["failed"] += 1
-                self._warn(f"读取文章失败（已跳过）：{url} —— {exc}")
+                short = str(exc)[:50]
+                self._warn(f"读取失败：{label}（{short}）")
                 return url, None
 
         with ThreadPoolExecutor(max_workers=self.concurrency) as pool:
@@ -219,7 +220,11 @@ class DlouCrawler:
             try:
                 page = parse_page(self.client.get_text(url), url)
             except FetchError as error:
-                self._warn(str(error))
+                msg = str(error)
+                # CAS 登录重定向是正常的，不算警告
+                if "cas/login" in msg or "portal.dlou.edu.cn" in msg:
+                    continue
+                self._warn(f"{category}：列表页访问失败（{msg[:60]}）")
                 continue
             
             found_count = 0
@@ -241,7 +246,10 @@ class DlouCrawler:
         try:
             page = parse_page(self.client.get_text(url), url)
         except FetchError as error:
-            self._warn(str(error))
+            msg = str(error)
+            # CAS 登录重定向是正常的，不算警告
+            if "cas/login" not in msg and "portal.dlou.edu.cn" not in msg:
+                self._warn(f"读取失败：{fallback_title[:30]}（{msg[:50]}）")
             return Article(
                 title=fallback_title,
                 url=url,

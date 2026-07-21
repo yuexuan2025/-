@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PyInstaller entry: launch the GUI."""
+"""程序入口：启动图形界面。"""
 
 from tkinter import Tk
 
