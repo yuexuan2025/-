@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dlou-crawler"
-version = "2.0.0"
+version = "3.0.0"
 description = "大连海洋大学官网公开信息采集器"
 dependencies = [
     "tkhtmlview>=0.3",
