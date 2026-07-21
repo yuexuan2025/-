@@ -146,6 +146,10 @@ class CrawlerGUI:
               font=("Microsoft YaHei UI", 10),
               bg="white", fg="#64748b").pack(side="left", padx=(2, 0))
 
+        Label(inner, text="by yuexuan",
+              font=("Microsoft YaHei UI", 9),
+              bg="white", fg="#94a3b8").pack(side="right", padx=(0, 12))
+
         self.status_pill = Canvas(inner, width=96, height=26,
                                   bg="white", highlightthickness=0, bd=0)
         self.status_pill.pack(side="right")
