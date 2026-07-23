@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import threading
 import webbrowser
 from tkinter import (
@@ -12,7 +13,10 @@ from .crawler import Crawler, Article, CATEGORY_GROUPS, SOURCES
 from .report import generate_html_report, save_articles_json
 
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+def _get_output_dir() -> str:
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(os.path.dirname(sys.executable), "output")
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 
 class CrawlerGUI:
@@ -332,7 +336,6 @@ class CrawlerGUI:
             self.crawler = Crawler(
                 max_workers=20,
                 max_articles_per_source=15,
-                request_interval=0.1,
                 log_callback=self._log,
             )
             self.articles = self.crawler.crawl()
@@ -349,9 +352,10 @@ class CrawlerGUI:
 
         if self.articles:
             self._show_results()
-            os.makedirs(OUTPUT_DIR, exist_ok=True)
-            html_path = os.path.join(OUTPUT_DIR, "采集报告.html")
-            json_path = os.path.join(OUTPUT_DIR, "articles.json")
+            output_dir = _get_output_dir()
+            os.makedirs(output_dir, exist_ok=True)
+            html_path = os.path.join(output_dir, "采集报告.html")
+            json_path = os.path.join(output_dir, "articles.json")
             generate_html_report(self.articles, html_path)
             save_articles_json(self.articles, json_path)
             self._log(f"报告已生成：{html_path}")
@@ -439,7 +443,7 @@ class CrawlerGUI:
         self._detail_text.configure(state="disabled")
 
     def _on_open_report(self) -> None:
-        html_path = os.path.join(OUTPUT_DIR, "采集报告.html")
+        html_path = os.path.join(_get_output_dir(), "采集报告.html")
         if os.path.exists(html_path):
             webbrowser.open(f"file:///{html_path}")
         else:

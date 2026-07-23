@@ -67,13 +67,11 @@ class Crawler:
         self,
         max_workers: int = 20,
         max_articles_per_source: int = 15,
-        request_interval: float = 0.1,
         log_callback: Optional[Callable[[str], None]] = None,
     ) -> None:
         self.client = HttpClient(timeout=15)
         self.max_workers = max_workers
         self.max_articles_per_source = max_articles_per_source
-        self.request_interval = request_interval
         self._log = log_callback or (lambda msg: None)
         self.articles: list[Article] = []
         self._stop_flag = False
