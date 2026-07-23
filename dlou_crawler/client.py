@@ -4,17 +4,6 @@ from urllib.parse import urlsplit, urljoin, urlunsplit
 from urllib.error import URLError, HTTPError
 
 
-ALLOWED_HOSTS = frozenset({
-    "www.dlou.edu.cn", "news.dlou.edu.cn",
-    "life.dlou.edu.cn", "hhxy.dlou.edu.cn", "food.dlou.edu.cn",
-    "tmgc.dlou.edu.cn", "jixie.dlou.edu.cn", "sea.dlou.edu.cn",
-    "xxgc.dlou.edu.cn", "jjgl.dlou.edu.cn", "fxy.dlou.edu.cn",
-    "wgy.dlou.edu.cn", "zwhzbx.dlou.edu.cn", "mks.dlou.edu.cn",
-    "jxjyxy.dlou.edu.cn", "gzy.dlou.edu.cn", "master.dlou.edu.cn",
-    "tyxy.dlou.edu.cn", "jiuye.dlou.edu.cn", "jzszx.dlou.edu.cn",
-})
-
-
 class _SmartRedirect(HTTPRedirectHandler):
     max_redirects = 3
 
@@ -48,9 +37,10 @@ class _SmartRedirect(HTTPRedirectHandler):
         )
 
         if is_same_domain or is_https_upgrade:
+            ua = req.get_header("User-Agent") or "Mozilla/5.0"
             new_req = Request(
                 urlunsplit(new),
-                headers={"User-Agent": req.get_header("User-Agent")},
+                headers={"User-Agent": ua},
                 origin_req_host=req.origin_req_host,
             )
             return new_req
@@ -69,7 +59,7 @@ class HttpClient:
             self._local.opener = build_opener(handler)
         return self._local.opener
 
-    def get(self, url: str, retries: int = 2) -> str:
+    def get(self, url: str, retries: int = 3) -> str:
         if not url:
             return ""
 
@@ -90,10 +80,22 @@ class HttpClient:
                                       "Chrome/120.0.0.0 Safari/537.36",
                         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                         "Accept-Language": "zh-CN,zh;q=0.9",
+                        "Connection": "keep-alive",
                     },
                 )
                 with opener.open(req, timeout=self._timeout) as resp:
                     raw = resp.read()
+                    if not raw:
+                        continue
+
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "charset=" in content_type:
+                        enc = content_type.split("charset=")[-1].strip()
+                        try:
+                            return raw.decode(enc)
+                        except (UnicodeDecodeError, LookupError):
+                            pass
+
                     for enc in ("utf-8", "gbk", "gb2312", "iso-8859-1"):
                         try:
                             return raw.decode(enc)

@@ -244,13 +244,27 @@ def is_article_link(href, text=None) -> bool:
     if href_lower.startswith(("javascript:", "#", "mailto:", "tel:")):
         return False
 
+    parsed = urlparse(href)
+    path = parsed.path.lower()
+
+    if not path or path == "/" or "main.psp" in path or "main.htm" in path:
+        return False
+
+    if "/list" in path or "list.htm" in path:
+        return False
+
+    if re.search(r"/\d{4}/\d{3,4}/[a-z]\d+a\d+", path):
+        return True
+
+    if "/page.htm" in path:
+        return True
+
     article_indicators = [
         "/article", "/news", "/notice", "/announce",
-        "/info", "/detail", "/content", "/page.",
-        ".psp", ".htm", ".html", ".shtml",
+        "/info", "/detail", "/content",
     ]
 
-    has_indicator = any(ind in href_lower for ind in article_indicators)
+    has_indicator = any(ind in path for ind in article_indicators)
 
     if not has_indicator:
         return False
@@ -350,6 +364,11 @@ def extract_list_links(html: str, base_url: str) -> list[dict]:
                             "title": text,
                             "date": None,
                         })
+                    elif text:
+                        for link in self.found_links:
+                            if link["url"] == url and not link["title"]:
+                                link["title"] = text
+                                break
                 self._current_href = None
                 self._current_text = []
 
